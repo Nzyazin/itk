@@ -29,5 +29,5 @@ const (
 type WalletOperation struct {
 	WalletID      uuid.UUID     `json:"walletId"`
 	OperationType OperationType `json:"operationType"`
-	Amount        int64       `json:"amount"`
+	Amount        string       `json:"amount"`
 }

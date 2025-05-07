@@ -7,45 +7,56 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// NewLogger создает новый экземпляр логгера и возвращает его вместе с функцией для очистки
 func NewLogger() (*zap.Logger, func()) {
-	// Открываем файл для логирования
-	logFile, err := os.OpenFile("logs/service.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic("failed to open log file: " + err.Error())
-	}
+    infoFile, err := os.OpenFile("logs/info.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    if err != nil {
+        panic("failed to open info log file: " + err.Error())
+    }
 
-	// Настройка конфигурации логера
-	config := zap.NewProductionConfig()
-	config.OutputPaths = []string{"stdout", "file://" + logFile.Name()} // Записываем в stdout и файл
-	config.EncoderConfig = zapcore.EncoderConfig{
-		TimeKey:        "timestamp",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		MessageKey:     "message",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
+    errorFile, err := os.OpenFile("logs/error.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    if err != nil {
+        panic("failed to open error log file: " + err.Error())
+    }
+    
+    encoderConfig := zapcore.EncoderConfig{
+        TimeKey:        "timestamp",
+        LevelKey:       "level",
+        NameKey:        "logger",
+        CallerKey:      "caller",
+        MessageKey:     "message",
+        StacktraceKey:  "stacktrace",
+        LineEnding:     zapcore.DefaultLineEnding,
+        EncodeLevel:    zapcore.LowercaseLevelEncoder,
+        EncodeTime:     zapcore.ISO8601TimeEncoder,
+        EncodeDuration: zapcore.SecondsDurationEncoder,
+        EncodeCaller:   zapcore.ShortCallerEncoder,
+    }
 
-	// Создаем новый логгер с конфигурированием
-	logger, err := config.Build()
-	if err != nil {
-		panic("failed to create logger: " + err.Error())
-	}
+    infoCore := zapcore.NewCore(
+        zapcore.NewJSONEncoder(encoderConfig),
+        zapcore.AddSync(infoFile),
+        zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+            return lvl <= zapcore.InfoLevel 
+        }),
+    )
 
-	// Функция для очистки логов (вызов sync для сохранения всех записанных логов)
-	cleanup := func() {
-		err := logger.Sync()
-		if err != nil {
-			panic("failed to sync logger: " + err.Error())
-		}
-	}
+    errorCore := zapcore.NewCore(
+        zapcore.NewJSONEncoder(encoderConfig),
+        zapcore.AddSync(errorFile),
+        zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+            return lvl >= zapcore.WarnLevel
+        }),
+    )
 
-	// Возвращаем логгер и функцию очистки
-	return logger, cleanup
+    core := zapcore.NewTee(infoCore, errorCore)
+
+    logger := zap.New(core, zap.AddCaller())
+
+    cleanup := func() {
+        logger.Sync()
+        infoFile.Close()
+        errorFile.Close()
+    }
+
+    return logger, cleanup
 }
