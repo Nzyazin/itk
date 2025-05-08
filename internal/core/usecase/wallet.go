@@ -10,7 +10,6 @@ import (
 	"github.com/Nzyazin/itk/internal/core/models"
 	"github.com/Nzyazin/itk/internal/core/repository"
 	"github.com/shopspring/decimal"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -23,34 +22,35 @@ type walletUsecase struct {
 	log  logger.Logger
 }
 
-func (uc *walletUsecase) OperateWallet(ctx context.Context, op *models.WalletOperation) error {
+func (uc *walletUsecase) OperateWallet(ctx context.Context, op *models.WalletOperation) (int64, error) {
     uc.logStart(op)
     
     wallet, err := uc.getWallet(ctx, op)
     if err != nil {
-        return err
+        return 0, err
     }
 
     currency, err := uc.getCurrency(ctx, wallet)
     if err != nil {
-        return err
+        return 0, err
     }
 
     amount, err := uc.convertAmount(op.Amount, currency)
     if err != nil {
-        return err
+        return 0, err
     }
 
     amount, err = uc.checkBalance(wallet, amount, op.OperationType)
     if err != nil {
-        return err
+        return 0, err
     }
 
-    if err := uc.updateBalance(ctx, wallet.ID, amount, op.OperationType); err != nil {
-        return err
+    newBalance, err := uc.repo.ExecuteTx(ctx, wallet.ID, amount, op.OperationType)
+    if err != nil {
+        return 0, err
     }
 
-    return uc.createTransaction(ctx, wallet, amount, op)
+    return newBalance, nil
 }
 
 func (uc *walletUsecase) logStart(op *models.WalletOperation) {
@@ -102,37 +102,3 @@ func (uc *walletUsecase) checkBalance(wallet *models.Wallet, amount int64, opTyp
     return amount, nil
 }
 
-func (uc *walletUsecase) updateBalance(ctx context.Context, walletID uuid.UUID, amount int64, opType models.OperationType) error {
-    if opType == models.OperationWithdraw {
-        amount = -amount
-    }
-
-    if err := uc.repo.UpdateBalance(ctx, walletID, amount, opType); err != nil {
-        uc.log.Error("Balance update failed",
-            zap.Error(err),
-            zap.Int64("delta", amount))
-        return fmt.Errorf("update balance: %w", err)
-    }
-    return nil
-}
-
-func (uc *walletUsecase) createTransaction(ctx context.Context, wallet *models.Wallet, amount int64, op *models.WalletOperation) error {
-    tx := &models.Transaction{
-        WalletID:      wallet.ID,
-        OperationType: op.OperationType,
-        Amount:        amount,
-        Status:        "COMPLETED",
-    }
-
-    if err := uc.repo.CreateTransaction(ctx, tx); err != nil {
-        uc.log.Error("Transaction failed",
-            zap.Error(err),
-            zap.Any("tx", tx))
-        return fmt.Errorf("create transaction: %w", err)
-    }
-
-    uc.log.Info("Operation success",
-        zap.String("tx_id", tx.ID.String()),
-        zap.Int64("new_balance", wallet.Balance+amount))
-    return nil
-}
