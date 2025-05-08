@@ -7,6 +7,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+type Logger interface {
+    Info(msg string, fields ...zap.Field)
+    Error(msg string, fields ...zap.Field)
+    Debug(msg string, fields ...zap.Field)
+    Warn(msg string, fields ...zap.Field)
+}
+
 func NewLogger() (*zap.Logger, func()) {
     infoFile, err := os.OpenFile("logs/info.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
     if err != nil {
