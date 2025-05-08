@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // Wallet представляет модель кошелька
@@ -30,4 +31,5 @@ type WalletOperation struct {
 	WalletID      uuid.UUID     `json:"walletId"`
 	OperationType OperationType `json:"operationType"`
 	Amount        string       `json:"amount"`
+	DecimalAmount decimal.Decimal `json:"-"`
 }
