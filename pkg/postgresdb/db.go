@@ -1,32 +1,24 @@
-package postgres
+package postgresdb
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"github.com/Nzyazin/zadnik.store/internal/auth/config"
-	_ "github.com/lib/pq"
 	"time"
+
+	_ "github.com/lib/pq"
+	"github.com/jmoiron/sqlx"
+	"github.com/Nzyazin/itk/internal/core/logger"
+	"github.com/Nzyazin/itk/pkg/config"
 )
 
-type Config struct {
-    Host         string
-    Port         int
-    User         string
-    Password     string
-    DBName       string
-    SSLMode      string
-    MaxOpenConns int
-    MaxIdleConns int
-}
-
 type Database struct {
-	*sql.DB
+	log logger.Logger
+	*sqlx.DB
 }
 
-func NewPostgresDB(cfg Config, log logger.Logger) (*Database, error) {
+func NewPostgresDB(cfg config.DBConfig, log logger.Logger) (*Database, error) {
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.Host,
 		cfg.Port,
 		cfg.User,
@@ -34,7 +26,7 @@ func NewPostgresDB(cfg Config, log logger.Logger) (*Database, error) {
 		cfg.Name,
 	)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := sqlx.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("error opening database: %w", err)
 	}
@@ -50,5 +42,10 @@ func NewPostgresDB(cfg Config, log logger.Logger) (*Database, error) {
     db.SetMaxIdleConns(cfg.MaxIdleConns)
     db.SetConnMaxLifetime(2 * time.Hour)
 
-	return &Database{db}, nil
+	return &Database{log: log, DB: db}, nil
+}
+
+func (db *Database) Close() error {
+	db.log.Info("Closing database connection")
+	return db.DB.Close()
 }

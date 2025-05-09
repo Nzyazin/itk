@@ -11,7 +11,6 @@ import (
 	"github.com/Nzyazin/itk/internal/core/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 )
 
 const (
@@ -30,7 +29,7 @@ type postgresWalletRepo struct {
 	log logger.Logger
 }
 
-func NewWalletRepository(db *sqlx.DB, log logger.Logger) repository.WalletRepository {
+func NewPostgresWalletRepo(db *sqlx.DB, log logger.Logger) repository.WalletRepository {
 	return &postgresWalletRepo{
 		db: db,
 		log: log,
@@ -69,22 +68,26 @@ func (r *postgresWalletRepo) ExecuteTx(ctx context.Context, walletID uuid.UUID, 
 	var isCommitted bool
 	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
     if err != nil {
-        r.log.Error("Error beginning transaction", zap.Error(err))
+        r.log.Error("Error beginning transaction", 
+            logger.ErrorField("error", err))
         return 0, fmt.Errorf("error beginning transaction: %w", err)
     }
 
     defer func() {
         if err != nil && !isCommitted {
             if rbErr := tx.Rollback(); rbErr != nil {
-                r.log.Error("Transaction rollback failed", zap.Error(rbErr))
+                r.log.Error("Transaction rollback failed", 
+                    logger.ErrorField("error", rbErr))
                 err = fmt.Errorf("%w (rollback failed: %v)", err, rbErr)
             } else {
-                r.log.Warn("Transaction rolled back due to error", zap.Error(err))
+                r.log.Warn("Transaction rolled back due to error", 
+                    logger.ErrorField("error", err))
             }
         }
     }()
 
-    if err := r.updateBalance(ctx, tx, walletID, amount, operationType); err != nil {
+    newBalance, err := r.updateBalance(ctx, tx, walletID, amount, operationType)
+    if err != nil {
         return 0, err
     }
 
@@ -93,15 +96,16 @@ func (r *postgresWalletRepo) ExecuteTx(ctx context.Context, walletID uuid.UUID, 
     }
 
     if err = tx.Commit(); err != nil {
-        r.log.Error("Error committing transaction", zap.Error(err))
+        r.log.Error("Error committing transaction", 
+            logger.ErrorField("error", err))
         return 0, fmt.Errorf("commit failed: %w", err)
     }
 
     isCommitted = true
-    return 0, nil
+    return newBalance, nil
 }
 
-func (r *postgresWalletRepo) updateBalance(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, amount int64, operationType models.OperationType) error {
+func (r *postgresWalletRepo) updateBalance(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, amount int64, operationType models.OperationType) (int64, error) {
     var delta int64
     switch operationType {
     case models.OperationDeposit:
@@ -109,7 +113,7 @@ func (r *postgresWalletRepo) updateBalance(ctx context.Context, tx *sqlx.Tx, wal
     case models.OperationWithdraw:
         delta = -amount
     default:
-        return ErrInvalidOperationType
+        return 0, ErrInvalidOperationType
     }
 
     var newBalance int64
@@ -122,16 +126,16 @@ func (r *postgresWalletRepo) updateBalance(ctx context.Context, tx *sqlx.Tx, wal
     err := tx.GetContext(ctx, &newBalance, updateQuery, delta, walletID)
     if err != nil {
         if errors.Is(err, sql.ErrNoRows) {
-            return fmt.Errorf("wallet not found: %s", walletID)
+            return 0, fmt.Errorf("wallet not found: %s", walletID)
         }
-        return fmt.Errorf("update balance: %w", err)
+        return 0, fmt.Errorf("update balance: %w", err)
     }
 
     if newBalance < 0 {
-        return ErrInsufficientFunds
+        return 0, ErrInsufficientFunds
     }
 
-    return nil
+    return newBalance, nil
 }
 
 func (r *postgresWalletRepo) createTransaction(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, amount int64, operationType models.OperationType, status string) error {
