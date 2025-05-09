@@ -18,6 +18,7 @@ import (
 	"github.com/slok/go-http-metrics/middleware/std"
 	"github.com/slok/go-http-metrics/middleware"
 	"github.com/slok/go-http-metrics/metrics/prometheus"
+	middlWre "github.com/Nzyazin/itk/internal/core/middleware"
 )
 
 type Server struct {
@@ -66,6 +67,10 @@ func NewServer(log logger.Logger) (*Server, error) {
 }
 
 func (s *Server) RegisterRoutes() {
+	s.router.Use(
+		middlWre.WithErrorHandler(s.log),
+		middlWre.Recovery(s.log),
+	)
 	s.router.HandleFunc("/api/v1/wallet", s.walletHandler.ProcessWalletOperation).Methods("POST")
 	s.router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 	s.router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
@@ -75,10 +80,10 @@ func (s *Server) Run(addr string) error {
 	srv := &http.Server{
 		Addr: addr,
 		Handler: s.router,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       9 * time.Second,
+		WriteTimeout:      12 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 60 * time.Second,
 	}
 
 	s.httpServer = srv

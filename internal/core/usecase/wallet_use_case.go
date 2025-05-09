@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -90,23 +89,25 @@ func (uc *walletUsecase) getCurrency(ctx context.Context, wallet *models.Wallet)
     return currency, nil
 }
 
-func (uc *walletUsecase) convertAmountToMinorUnits(input string, currency *models.Currency) (int64, error) {
-    normalized := strings.ReplaceAll(input, ",", ".")
-    amount, err := decimal.NewFromString(normalized)
+func (uc *walletUsecase) convertAmountToMinorUnits(amountStr string, currency *models.Currency) (int64, error) {
+    normalAmount := strings.ReplaceAll(amountStr, ",", ".")
+    amount, err := decimal.NewFromString(normalAmount)
     if err != nil {
         uc.log.Error("Amount conversion error",
-            logger.StringField("input", input),
+            logger.StringField("input", amountStr),
             logger.ErrorField("error", err))
         return 0, fmt.Errorf("convert amount: %w", err)
     }
-    return amount.Mul(decimal.NewFromInt(int64(currency.MinorUnits))).IntPart(), nil
+    multiplier := decimal.NewFromInt(10).Pow(decimal.NewFromInt(currency.MinorUnits))
+    return amount.Mul(multiplier).IntPart(), nil
 }
 
 func (uc *walletUsecase) convertAmountFromMinorUnits(minorUnits int64, currency *models.Currency) (decimal.Decimal, error) {
 	if currency.MinorUnits <= 0 {
 		return decimal.Zero, fmt.Errorf("invalid currency minor units: %d", currency.MinorUnits)
 	}
-	return decimal.NewFromInt(minorUnits).Div(decimal.NewFromInt(int64(currency.MinorUnits))), nil
+    divisor := decimal.NewFromInt(10).Pow(decimal.NewFromInt(currency.MinorUnits))
+	return decimal.NewFromInt(minorUnits).Div(divisor), nil
 }
 
 func (uc *walletUsecase) checkBalance(wallet *models.Wallet, amount int64, opType models.OperationType) (int64, error) {
@@ -114,7 +115,7 @@ func (uc *walletUsecase) checkBalance(wallet *models.Wallet, amount int64, opTyp
         uc.log.Warn("Insufficient funds",
             logger.Int64Field("balance", wallet.Balance),
             logger.Int64Field("requested", amount))
-        return 0, errors.New("insufficient funds")
+        return 0, ErrInsufficientFunds
     }
     return amount, nil
 }
