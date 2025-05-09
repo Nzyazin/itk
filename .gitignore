@@ -1,2 +1,3 @@
 config.env
 logs/*
+internal/core/repository/postgres/logs/*
