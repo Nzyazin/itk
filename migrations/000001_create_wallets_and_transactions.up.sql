@@ -12,6 +12,7 @@ CREATE TABLE transactions (
     wallet_id UUID NOT NULL REFERENCES wallets(id),
     operation_type VARCHAR(10) NOT NULL CHECK (operation_type IN ('DEPOSIT', 'WITHDRAW')),
     amount BIGINT NOT NULL,
+    status VARCHAR(10) NOT NULL DEFAULT 'COMPLETED',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -19,7 +20,7 @@ CREATE TABLE transactions (
 CREATE TABLE currencies (
     code CHAR(3) PRIMARY KEY, -- например: 'USD', 'RUB', 'EUR'
     name TEXT NOT NULL,       -- Полное название, например "US Dollar"
-    minor_unit SMALLINT NOT NULL DEFAULT 2, -- Кол-во дробных знаков (например: 2 → 1 доллар = 100 центов)
+    minor_units SMALLINT NOT NULL DEFAULT 2, -- Кол-во дробных знаков (например: 2 → 1 доллар = 100 центов)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -43,3 +44,15 @@ CREATE TRIGGER update_transactions_updated_at
 BEFORE UPDATE ON transactions
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+INSERT INTO currencies (code, name, minor_units)
+VALUES 
+  ('USD', 'US Dollar', 2),
+  ('EUR', 'Euro', 2),
+  ('RUB', 'Russian Ruble', 2);
+
+
+INSERT INTO wallets (id, balance, currency_code)
+VALUES 
+  ('33333333-3333-3333-3333-333333333333', 75000, 'RUB');
+

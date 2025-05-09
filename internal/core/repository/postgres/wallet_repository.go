@@ -165,3 +165,38 @@ func (r *postgresWalletRepo) createTransaction(ctx context.Context, tx *sqlx.Tx,
 
     return nil
 }
+
+// func (r *postgresWalletRepo) TransferFunds(ctx context.Context, from, to uuid.UUID, amount int64) error {
+//     var lastErr error
+    
+//     for attempt := 1; attempt <= maxRetries; attempt++ {
+//         err := r.db.WithTransaction(ctx, func(tx *sqlx.Tx) error {
+//             // Логика транзакции
+//             return nil
+//         })
+        
+//         if err == nil {
+//             return nil
+//         }
+        
+//         if isRetryableError(err) {
+//             sleep := time.Duration(attempt*attempt) * time.Second
+//             time.Sleep(sleep)
+//             lastErr = err
+//             continue
+//         }
+        
+//         return err
+//     }
+    
+//     return fmt.Errorf("transaction failed after %d attempts: %w", maxRetries, lastErr)
+// }
+
+// func isRetryableError(err error) bool {
+//     // 40001 - serialization failure (PostgreSQL)
+//     // 40P01 - deadlock detected
+//     if pgErr, ok := err.(*pgconn.PgError); ok {
+//         return pgErr.Code == "40001" || pgErr.Code == "40P01"
+//     }
+//     return false
+// }
