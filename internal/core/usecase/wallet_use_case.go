@@ -47,7 +47,7 @@ func (uc *walletUsecase) OperateWallet(ctx context.Context, op models.WalletOper
         return decimal.Zero, err
     }
 
-    newBalance, err := uc.repo.ExecuteTx(ctx, wallet.ID, amount, op.OperationType)
+    newBalance, err := uc.repo.ExecuteTxWithRetry(ctx, wallet.ID, amount, op.OperationType)
     if err != nil {
         return decimal.Zero, err
     }

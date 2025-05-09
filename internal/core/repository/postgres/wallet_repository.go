@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Nzyazin/itk/internal/core/repository"
 	"github.com/Nzyazin/itk/internal/core/logger"
 	"github.com/Nzyazin/itk/internal/core/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+    "github.com/lib/pq"
+
 )
 
 const (
@@ -64,7 +67,31 @@ func (r *postgresWalletRepo) GetCurrencyByCode(ctx context.Context, code string)
 	return &currency, nil
 }
 
-func (r *postgresWalletRepo) ExecuteTx(ctx context.Context, walletID uuid.UUID, amount int64, operationType models.OperationType) (int64, error) {
+const maxRetries = 6
+
+func (r *postgresWalletRepo) ExecuteTxWithRetry(ctx context.Context, walletID uuid.UUID, amount int64, opType models.OperationType) (int64, error) {
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		newBalance, err := r.executeTx(ctx, walletID, amount, opType)
+		if err == nil {
+			return newBalance, nil
+		}
+
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
+			sleep := time.Duration((attempt+1)*(attempt+1)) * 100 * time.Millisecond
+			time.Sleep(sleep)
+			lastErr = err
+			continue
+		}
+		return 0, err
+	}
+    
+	return 0, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+}
+
+
+func (r *postgresWalletRepo) executeTx(ctx context.Context, walletID uuid.UUID, amount int64, operationType models.OperationType) (int64, error) {
 	var isCommitted bool
 	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
     if err != nil {
@@ -165,38 +192,3 @@ func (r *postgresWalletRepo) createTransaction(ctx context.Context, tx *sqlx.Tx,
 
     return nil
 }
-
-// func (r *postgresWalletRepo) TransferFunds(ctx context.Context, from, to uuid.UUID, amount int64) error {
-//     var lastErr error
-    
-//     for attempt := 1; attempt <= maxRetries; attempt++ {
-//         err := r.db.WithTransaction(ctx, func(tx *sqlx.Tx) error {
-//             // Логика транзакции
-//             return nil
-//         })
-        
-//         if err == nil {
-//             return nil
-//         }
-        
-//         if isRetryableError(err) {
-//             sleep := time.Duration(attempt*attempt) * time.Second
-//             time.Sleep(sleep)
-//             lastErr = err
-//             continue
-//         }
-        
-//         return err
-//     }
-    
-//     return fmt.Errorf("transaction failed after %d attempts: %w", maxRetries, lastErr)
-// }
-
-// func isRetryableError(err error) bool {
-//     // 40001 - serialization failure (PostgreSQL)
-//     // 40P01 - deadlock detected
-//     if pgErr, ok := err.(*pgconn.PgError); ok {
-//         return pgErr.Code == "40001" || pgErr.Code == "40P01"
-//     }
-//     return false
-// }

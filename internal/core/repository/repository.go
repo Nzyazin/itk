@@ -10,5 +10,5 @@ import (
 type WalletRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Wallet, error)
 	GetCurrencyByCode(ctx context.Context, code string) (*models.Currency, error)
-	ExecuteTx(ctx context.Context, walletID uuid.UUID, amount int64, operationType models.OperationType) (newBalance int64, err error)
+    ExecuteTxWithRetry(ctx context.Context, walletID uuid.UUID, amount int64, opType models.OperationType) (int64, error)
 }
