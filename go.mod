@@ -1,6 +1,8 @@
 module github.com/Nzyazin/itk
 
-go 1.23.1
+go 1.23.0
+
+toolchain go1.23.1
 
 require (
 	github.com/docker/docker v24.0.9+incompatible
