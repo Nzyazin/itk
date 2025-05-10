@@ -67,33 +67,34 @@ func (r *postgresWalletRepo) GetCurrencyByCode(ctx context.Context, code string)
 	return &currency, nil
 }
 
-const maxRetries = 6
+const maxRetries = 27
+const baseSleep = 270 * time.Millisecond
 
 func (r *postgresWalletRepo) ExecuteTxWithRetry(ctx context.Context, walletID uuid.UUID, amount int64, opType models.OperationType) (int64, error) {
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		newBalance, err := r.executeTx(ctx, walletID, amount, opType)
-		if err == nil {
-			return newBalance, nil
-		}
+    var lastErr error
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        newBalance, err := r.executeTx(ctx, walletID, amount, opType)
+        if err == nil {
+            return newBalance, nil
+        }
 
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
-			sleep := time.Duration((attempt+1)*(attempt+1)) * 100 * time.Millisecond
-			time.Sleep(sleep)
-			lastErr = err
-			continue
-		}
-		return 0, err
-	}
-    
-	return 0, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+        var pgErr *pq.Error
+        if errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
+			sleep := time.Duration((attempt+1)*(attempt+1)) * baseSleep
+            time.Sleep(sleep)
+            lastErr = err
+            continue
+        }
+
+        return 0, err
+    }
+
+    return 0, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
 }
 
-
 func (r *postgresWalletRepo) executeTx(ctx context.Context, walletID uuid.UUID, amount int64, operationType models.OperationType) (int64, error) {
-	var isCommitted bool
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+    var isCommitted bool
+    tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
     if err != nil {
         r.log.Error("Error beginning transaction", 
             logger.ErrorField("error", err))
@@ -123,6 +124,9 @@ func (r *postgresWalletRepo) executeTx(ctx context.Context, walletID uuid.UUID, 
     }
 
     if err = tx.Commit(); err != nil {
+        if pgErr, ok := err.(*pq.Error); ok && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
+            return 0, pgErr
+        }
         r.log.Error("Error committing transaction", 
             logger.ErrorField("error", err))
         return 0, fmt.Errorf("commit failed: %w", err)

@@ -100,7 +100,7 @@ func TestConcurrentDeposits(t *testing.T) {
 	require.NoError(t, err)
 
 	// Параметры нагрузки
-	const goroutines = 100
+	const goroutines = 1000
 	const amount = int64(1)
 
 	var wg sync.WaitGroup
