@@ -1,10 +1,12 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.20-alpine AS builder
 
 WORKDIR /app
 
 COPY go.mod go.sum ./
 
+ENV GOPROXY=direct
 RUN go mod tidy
+RUN go mod download
 
 COPY . .
 
@@ -19,5 +21,4 @@ COPY --from=builder /app/config.env .
 
 EXPOSE 8080
 
-# Команда для запуска миграций и приложения
 CMD ["./wallet-service"]
